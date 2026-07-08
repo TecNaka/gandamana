@@ -7,7 +7,7 @@
 * Motion = roslaunch op3_action_editor op3_action_editor.launch
 * Driver = rosrun kri2024 driver_baru.py
 * Odometry = rosrun kri2024 odometry.py
-* Vision = rosrun vision_cpp vision || rosrun v2_detection vision_2025_yv5.py
+* Vision = rosrun vision_cpp vision 
 * Cek button = rostopic echo /robotis/open_cr/button
 * Lapangan = rosrun kri2024 lapangan.py
 * Communication sender = rosrun communication com_sendernasional.py
