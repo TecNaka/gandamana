@@ -1,0 +1,5 @@
+<launch>
+    <node name="com_sendernasional_py" pkg="communication" type="com_sendernasional.py" output="screen"/>
+    <node name="com_receivernasional_py" pkg="communication" type="com_receivernasional.py" output="screen"/>
+    <node name="robot3_com_py" pkg="communication" type="robot3_com.py" output="screen"/>
+</launch>
