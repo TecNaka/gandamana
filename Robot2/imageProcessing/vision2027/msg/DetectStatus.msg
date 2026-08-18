@@ -1,0 +1,1 @@
+string detect_status

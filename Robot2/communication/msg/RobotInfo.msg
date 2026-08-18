@@ -1,0 +1,9 @@
+int8 playerID
+string fall
+string task
+float32 posx
+float32 posy
+float32 posw
+string detect
+int32 ballsize
+float32 goalorient

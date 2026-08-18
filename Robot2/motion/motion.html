@@ -1,0 +1,2420 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body { font-family: Courier, monospace; font-size: 10pt; line-height: 1.3; }
+h1 { font-size: 18pt; text-align: center; margin-top: 30px; }
+h2 { font-size: 14pt; margin-top: 20px; }
+h3 { font-size: 12pt; margin-top: 15px; }
+pre { background: #f0f0f0; padding: 10px; font-size: 8pt; }
+code { font-size: 8pt; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 8pt; }
+th, td { border: 1px solid #333; padding: 4px; }
+th { background: #ddd; }
+hr { margin: 20px 0; }
+</style>
+</head>
+<body>
+<h1>EBOOK MOTION SYSTEM</h1>
+<h2>Robot Humanoid Gandamana — Universitas Negeri Surabaya</h2>
+<h3>KRSBI-H (Kontes Robot Sepak Bola Indonesia - Humanoid)</h3>
+<p><strong>Platform:</strong> ROBOTIS OP3 | <strong>ROS Package:</strong> kri2027 | <strong>Tahun:</strong> 2025-2026</p>
+<hr />
+<h1>DAFTAR ISI</h1>
+<ol>
+<li><a href="#1-pendahuluan">Pendahuluan</a></li>
+<li><a href="#2-arsitektur-motion-system">Arsitektur Motion System</a></li>
+<li><a href="#3-ros-topic-map-lengkap">ROS Topic Map Lengkap</a></li>
+<li><a href="#4-processpy--state-machine-utama">process.py — State Machine Utama</a></li>
+<li><a href="#5-process_barupy--state-machine-versi-baru">process_baru.py — State Machine Versi Baru</a></li>
+<li><a href="#6-varian-process-lainnya">Varian Process Lainnya</a></li>
+<li><a href="#7-driverpy--low-level-driver">driver.py — Low-Level Driver</a></li>
+<li><a href="#8-driver_baru_2025py--driver-terbaru">driver_baru_2025.py — Driver Terbaru</a></li>
+<li><a href="#9-varian-driver-lainnya">Varian Driver Lainnya</a></li>
+<li><a href="#10-odometry-system">Odometry System</a></li>
+<li><a href="#11-lapanganpy--field-visualization">lapangan.py — Field Visualization</a></li>
+<li><a href="#12-keeper-system">Keeper System</a></li>
+<li><a href="#13-movement-schemes-skema">Movement Schemes (Skema)</a></li>
+<li><a href="#14-file-testing">File Testing</a></li>
+<li><a href="#15-complete-function-reference">Complete Function Reference</a></li>
+<li><a href="#16-parameter-tuning-guide">Parameter Tuning Guide</a></li>
+<li><a href="#17-debugging--troubleshooting">Debugging &amp; Troubleshooting</a></li>
+<li><a href="#18-lampiran-kode-akses-cepat">Lampiran: Kode Akses Cepat</a></li>
+</ol>
+<hr />
+<h1>1. PENDAHULUAN</h1>
+<h2>1.1 Tentang Dokumen Ini</h2>
+<p>Ebook ini adalah referensi lengkap untuk <strong>Motion System</strong> robot humanoid Gandamana yang berlaga di KRSBI-H. Seluruh kode sumber berada di folder <code>motion/src/</code> sebagai bagian dari ROS package <code>kri2027</code>.</p>
+<h2>1.2 Hardware Platform</h2>
+<table>
+<thead>
+<tr>
+<th>Komponen</th>
+<th>Spesifikasi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Robot</td>
+<td>ROBOTIS OP3</td>
+</tr>
+<tr>
+<td>Main Controller</td>
+<td>Intel NUC / Onboard Computer (ROS)</td>
+</tr>
+<tr>
+<td>Sub-Controller</td>
+<td>OpenCR (STM32F4)</td>
+</tr>
+<tr>
+<td>Aktuator</td>
+<td>Dynamixel MX-28/XL-320 (20 servo)</td>
+</tr>
+<tr>
+<td>DOF Kaki</td>
+<td>6 per kaki (hip yaw/roll/pitch, knee, ankle pitch/roll)</td>
+</tr>
+<tr>
+<td>DOF Kepala</td>
+<td>2 (pan + tilt)</td>
+</tr>
+<tr>
+<td>Kamera</td>
+<td>320x240 @ 60 FPS (V4L2)</td>
+</tr>
+<tr>
+<td>IMU</td>
+<td>BNO055 (di dalam OpenCR)</td>
+</tr>
+<tr>
+<td>Yaw Sensor</td>
+<td>Magnetometer (OpenCR)</td>
+</tr>
+</tbody>
+</table>
+<h2>1.3 Daftar File di motion/src/</h2>
+<table>
+<thead>
+<tr>
+<th>No</th>
+<th>Nama File</th>
+<th>Baris</th>
+<th>Fungsi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>process.py</code></td>
+<td>1785</td>
+<td>State machine utama (3 role: UTAMA/SECOND/GOTO)</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>process_baru.py</code></td>
+<td>1265</td>
+<td>State machine versi lebih baru</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>proses_baru_2025.py</code></td>
+<td>~2000</td>
+<td>State machine dengan FSM lengkap + lane zones</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>proses_noncom.py</code></td>
+<td>~1700</td>
+<td>State machine tanpa komunikasi multi-robot</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>proses_noncom_nogyro.py</code></td>
+<td>~1400</td>
+<td>State machine tanpa kom dan tanpa gyro</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>process_com_beta.py</code></td>
+<td>~2000</td>
+<td>State machine dengan komunikasi beta</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>process_wilayah_shooter.py</code></td>
+<td>~700</td>
+<td>State machine untuk role shooter regional</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>process_wilayah_kickoff.py</code></td>
+<td>~300</td>
+<td>State machine untuk role kickoff regional</td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>projecttes.py</code></td>
+<td>~2000</td>
+<td>Prototype/test state machine</td>
+</tr>
+<tr>
+<td>10</td>
+<td><code>mlaku.py</code></td>
+<td>~1700</td>
+<td>Duplikat proses_noncom (mlaku = jalan)</td>
+</tr>
+<tr>
+<td>11</td>
+<td><code>driver.py</code></td>
+<td>587</td>
+<td>Low-level driver (original OP3 walk)</td>
+</tr>
+<tr>
+<td>12</td>
+<td><code>driver_baru_2025.py</code></td>
+<td>~2500</td>
+<td>Driver terbaru (OP3 + Quintic walk)</td>
+</tr>
+<tr>
+<td>13</td>
+<td><code>driver_.py</code></td>
+<td>~2500</td>
+<td>Driver lama (tanpa quintic)</td>
+</tr>
+<tr>
+<td>14</td>
+<td><code>keeper_driver.py</code></td>
+<td>~200</td>
+<td>Driver khusus kiper (sederhana)</td>
+</tr>
+<tr>
+<td>15</td>
+<td><code>keeper_proses.py</code></td>
+<td>0</td>
+<td><strong>KOSONG</strong> — belum ada logika kiper</td>
+</tr>
+<tr>
+<td>16</td>
+<td><code>odometry.py</code></td>
+<td>398</td>
+<td>Odometry original (OP3 walk)</td>
+</tr>
+<tr>
+<td>17</td>
+<td><code>odometry_baru_2025.py</code></td>
+<td>444</td>
+<td>Odometry terbaru (Quintic walk)</td>
+</tr>
+<tr>
+<td>18</td>
+<td><code>odometry_bno.py</code></td>
+<td>~1500</td>
+<td>Odometry dengan IMU BNO055</td>
+</tr>
+<tr>
+<td>19</td>
+<td><code>odometry_new.py</code></td>
+<td>~700</td>
+<td>Odometry sederhana (joint states langsung)</td>
+</tr>
+<tr>
+<td>20</td>
+<td><code>odometry_nongyro.py</code></td>
+<td>~900</td>
+<td>Odometry tanpa gyro</td>
+</tr>
+<tr>
+<td>21</td>
+<td><code>lapangan.py</code></td>
+<td>136</td>
+<td>Visualisasi lapangan Pygame</td>
+</tr>
+<tr>
+<td>22</td>
+<td><code>skema1.py</code></td>
+<td>~350</td>
+<td>Skema kickoff multi-robot 1</td>
+</tr>
+<tr>
+<td>23</td>
+<td><code>skema2.py</code></td>
+<td>~300</td>
+<td>Skema kickoff multi-robot 2</td>
+</tr>
+<tr>
+<td>24</td>
+<td><code>jalan_kotak.py</code></td>
+<td>~200</td>
+<td>Test jalan kotak</td>
+</tr>
+<tr>
+<td>25</td>
+<td><code>tesjalan.py</code></td>
+<td>~200</td>
+<td>Test jalan sederhana</td>
+</tr>
+<tr>
+<td>26</td>
+<td><code>tesskema1.py</code></td>
+<td>0</td>
+<td><strong>KOSONG</strong></td>
+</tr>
+<tr>
+<td>27</td>
+<td><code>test.py</code></td>
+<td>2</td>
+<td>Print hello world</td>
+</tr>
+<tr>
+<td>28</td>
+<td><code>projecttes.py</code></td>
+<td>~2000</td>
+<td>Prototype state machine</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h1>2. ARSITEKTUR MOTION SYSTEM</h1>
+<h2>2.1 Diagram Aliran Data</h2>
+<pre><code>+--------------------+         +--------------------+         +-------------------+
+|    SENSOR          |         |   KEPUTUSAN        |         |   EKSEKUTOR       |
+|                    |         |                    |         |                   |
+| OpenCR (Yaw/IMU)  |--------&gt;| process.py         |--------&gt;| driver.py         |----&gt; Hardware
+| Vision (Ball/Goal) |--------&gt;| (State Machine)    |         | (Low-Level Driver)|      (Servo)
+| Game Controller   |--------&gt;|                    |         |                   |
+| Komunikasi UDP    |--------&gt;| Com_decision()     |         | WalkingParam      |
++--------------------+         | Task Flow          |         | Action/Head       |
+                               | Fall Detection    |         | PID Tracking      |
+                               +--------------------+         +--------+----------+
+                                        |                              |
+                                        |                              v
+                                        |                     +--------+----------+
+                                        |                     | odometry_baru_    |
+                                        |                     | 2025.py           |
+                                        |                     | (Dead-Reckoning)  |
+                                        |                     |                   |
+                                        |                     | FK Kinematics     |
+                                        |                     | X,Y,Theta Calc    |
+                                        |                     +--------+----------+
+                                        |                              |
+                                        v                              v
+                               +--------------------+         +--------+----------+
+                               | lapangan.py        |         | process.py (baca) |
+                               | (Field Display)    |&lt;--------| posisi &amp; goalangle|
+                               | Pygame GUI         |         | untuk navigasi    |
+                               +--------------------+         +-------------------+
+</code></pre>
+<h2>2.2 Dual Walk Profile Architecture</h2>
+<p>Kode motion Gandamana memiliki <strong>dua profile walking engine</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Profile</th>
+<th>Message Type</th>
+<th>Topic</th>
+<th>Digunakan di</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Original OP3 Walk</strong></td>
+<td><code>op3_walking_module_msgs/WalkingParam</code></td>
+<td><code>/robotis/walking/set_params</code></td>
+<td>driver.py, odometry.py, proses_noncom_nogyro.py</td>
+</tr>
+<tr>
+<td><strong>Quintic Walk (Custom)</strong></td>
+<td><code>quintic_walk_msgs/WalkingParam</code></td>
+<td><code>/robotis/quintic_walk/set_params</code></td>
+<td>driver_baru_2025.py, odometry_baru_2025.py, odometry_bno.py</td>
+</tr>
+</tbody>
+</table>
+<p>Beberapa file support <strong>kedua profile</strong> (<code>driver_baru_2025.py</code>, <code>process_com_beta.py</code>, <code>projecttes.py</code>) dengan konstanta <code>PROFILE_QUINTIC</code>.</p>
+<h2>2.3 Tiga Role Robot</h2>
+<p>Sistem menggunakan 3 peran yang ditentukan oleh <code>Com_decision()</code>:</p>
+<pre><code>UTAMA --- Striker utama: follow_ball → positioning → kick
+SECOND -- Pendukung: follow_ball → flank positioning
+GOTO ---- Pemburu bola (tanpa nendang)
+</code></pre>
+<h2>2.4 Game Status Lifecycle</h2>
+<pre><code>INITIAL --► READY --► SET --► PRE_RUN --► RUN --► PRE_STOP --► STOP
+                         |                                    |
+                         |                +-------------------+
+                         ▼                ▼
+                    POSITIONING      PRE_IDLE --► IDLE (duduk)
+                    KICKOFF
+</code></pre>
+<hr />
+<h1>3. ROS TOPIC MAP LENGKAP</h1>
+<h2>3.1 Vision Topics</h2>
+<table>
+<thead>
+<tr>
+<th>Publisher</th>
+<th>Subscriber</th>
+<th>Type</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/DEWO/image_processing/deteksi_bola/ball_state</code></td>
+<td>process, driver</td>
+<td>BallState</td>
+<td>FOUND/NOTFOUND</td>
+</tr>
+<tr>
+<td><code>/DEWO/image_processing/deteksi_bola/coordinate</code></td>
+<td>process, driver</td>
+<td>BallCoordinate</td>
+<td>(pos_x, pos_y, obj_size)</td>
+</tr>
+<tr>
+<td><code>/DEWO/image_processing/deteksi_bola/goal_state</code></td>
+<td>process</td>
+<td>GoalState</td>
+<td>Goal FOUND/NOTFOUND</td>
+</tr>
+<tr>
+<td><code>/DEWO/image_processing/deteksi_bola/goal_coordinate</code></td>
+<td>process</td>
+<td>GoalCoordinate</td>
+<td>Goal position</td>
+</tr>
+<tr>
+<td><code>/DEWO/image_processing/deteksi_bola/tracking_state</code></td>
+<td>driver</td>
+<td>String</td>
+<td>start/stop tracking</td>
+</tr>
+<tr>
+<td><code>/DEWO/image_processing/deteksi_bola/positioning_state</code></td>
+<td>driver</td>
+<td>String</td>
+<td>start/stop positioning</td>
+</tr>
+<tr>
+<td><code>/DEWO/image_processing/deteksi_bola/keeper_action</code></td>
+<td>driver</td>
+<td>String</td>
+<td>A/B/C/X keeper action</td>
+</tr>
+</tbody>
+</table>
+<h2>3.2 Motion Control Topics (process → driver)</h2>
+<table>
+<thead>
+<tr>
+<th>Publisher (process)</th>
+<th>Subscriber (driver)</th>
+<th>Type</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/DEWO/MotionControl/MotionModule</code></td>
+<td>driver</td>
+<td>String</td>
+<td>"walk"/"action"/"head"</td>
+</tr>
+<tr>
+<td><code>/DEWO/MotionControl/Command</code></td>
+<td>driver</td>
+<td>String</td>
+<td>"start"/"stop"/"reset"</td>
+</tr>
+<tr>
+<td><code>/DEWO/MotionControl/WalkingParams</code></td>
+<td>driver</td>
+<td>WalkingParam</td>
+<td>Gait parameters</td>
+</tr>
+<tr>
+<td><code>/DEWO/MotionControl/ActionNum</code></td>
+<td>driver</td>
+<td>Int32</td>
+<td>Action page number</td>
+</tr>
+<tr>
+<td><code>/DEWO/MotionControl/HeadPan</code></td>
+<td>driver</td>
+<td>Float64</td>
+<td>Head pan angle</td>
+</tr>
+<tr>
+<td><code>/DEWO/MotionControl/HeadTilt</code></td>
+<td>driver</td>
+<td>Float64</td>
+<td>Head tilt angle</td>
+</tr>
+<tr>
+<td><code>/DEWO/MotionControl/HeadScan</code></td>
+<td>driver</td>
+<td>Bool</td>
+<td>Enable head scan</td>
+</tr>
+<tr>
+<td><code>/DEWO/MotionControl/pan_tilt_error</code></td>
+<td>process</td>
+<td>Float32MultiArray</td>
+<td>PID error feedback</td>
+</tr>
+<tr>
+<td><code>/DEWO/MotionControl/yaw</code></td>
+<td>odometry, lapangan</td>
+<td>Float32</td>
+<td>Normalized yaw heading</td>
+</tr>
+</tbody>
+</table>
+<h2>3.3 Hardware Topics (OpenCR → ROS)</h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Subscriber</th>
+<th>Type</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/robotis/open_cr/yaw</code></td>
+<td>process</td>
+<td>Int16</td>
+<td>Yaw heading (0-360°)</td>
+</tr>
+<tr>
+<td><code>/robotis/open_cr/imu</code></td>
+<td>process, driver</td>
+<td>Imu</td>
+<td>IMU orientation + angular velocity</td>
+</tr>
+<tr>
+<td><code>/robotis/open_cr/button</code></td>
+<td>process</td>
+<td>String</td>
+<td>Button press event</td>
+</tr>
+<tr>
+<td><code>/robotis/goal_joint_states</code></td>
+<td>driver</td>
+<td>JointState</td>
+<td>All joint positions</td>
+</tr>
+<tr>
+<td><code>/robotis/sync_write_item</code></td>
+<td>semua</td>
+<td>SyncWriteItem</td>
+<td>LED, buzzer control</td>
+</tr>
+</tbody>
+</table>
+<h2>3.4 Odometry Topics</h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Type</th>
+<th>Pub/Sub</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/DEWO/Odometry/jointkaki</code></td>
+<td>JointKaki</td>
+<td>driver → odometry</td>
+<td>Joint angles for FK</td>
+</tr>
+<tr>
+<td><code>/DEWO/Odometry/position</code></td>
+<td>Pose2D</td>
+<td>odometry → process, lapangan</td>
+<td>(x, y, theta)</td>
+</tr>
+<tr>
+<td><code>/DEWO/Odometry/goalangle</code></td>
+<td>Float32</td>
+<td>odometry → process</td>
+<td>Heading to goal</td>
+</tr>
+<tr>
+<td><code>/DEWO/Odometry/goal_position</code></td>
+<td>Pose2D</td>
+<td>process → odometry</td>
+<td>Target position</td>
+</tr>
+<tr>
+<td><code>/DEWO/Odometry/initpoint</code></td>
+<td>Pose2D</td>
+<td>process → odometry</td>
+<td>Reset initial position</td>
+</tr>
+<tr>
+<td><code>/DEWO/Odometry/task</code></td>
+<td>String</td>
+<td>process → odometry</td>
+<td>"move"/"rotate"/"stay"</td>
+</tr>
+<tr>
+<td><code>/DEWO/Odometry/cmd</code></td>
+<td>String</td>
+<td>process → odometry</td>
+<td>"start"/"stop"</td>
+</tr>
+</tbody>
+</table>
+<h2>3.5 Communication Topics</h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Type</th>
+<th>Pub/Sub</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/DEWO/Communication/robotinfo</code></td>
+<td>RobotInfo</td>
+<td>receiver → process</td>
+<td>Robot lain state</td>
+</tr>
+<tr>
+<td><code>/DEWO/Communication/from_udp_to_ros</code></td>
+<td>String</td>
+<td>receiver → process</td>
+<td>Command dari jaringan</td>
+</tr>
+<tr>
+<td><code>/DEWO/Communication/from_ros_to_udp</code></td>
+<td>String</td>
+<td>process → sender</td>
+<td>Data ke jaringan</td>
+</tr>
+<tr>
+<td><code>/DEWO/Communication/Task</code></td>
+<td>String</td>
+<td>process → sender</td>
+<td>Broadcast task</td>
+</tr>
+<tr>
+<td><code>/DEWO/Communication/Bodystate</code></td>
+<td>String</td>
+<td>process → sender</td>
+<td>Fall state</td>
+</tr>
+</tbody>
+</table>
+<h2>3.6 Game Controller Topics</h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Type</th>
+<th>Subscriber</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/DEWO/GameController/allstate</code></td>
+<td>GameControllerState</td>
+<td>process</td>
+<td>GC state</td>
+</tr>
+</tbody>
+</table>
+<h2>3.7 Hardware Command Topics (driver → robotis)</h2>
+<table>
+<thead>
+<tr>
+<th>Publisher (driver)</th>
+<th>Topic</th>
+<th>Type</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>pub_WalkingParams</td>
+<td><code>/robotis/walking/set_params</code></td>
+<td>WalkingParam</td>
+<td>Gait parameters</td>
+</tr>
+<tr>
+<td>pub_WalkingCommand</td>
+<td><code>/robotis/walking/command</code></td>
+<td>String</td>
+<td>"start"/"stop"</td>
+</tr>
+<tr>
+<td>pub_EnableCtrlModule</td>
+<td><code>/robotis/enable_ctrl_module</code></td>
+<td>String</td>
+<td>Module selection</td>
+</tr>
+<tr>
+<td>pub_InitPose</td>
+<td><code>/robotis/base/ini_pose</code></td>
+<td>String</td>
+<td>Initial pose reset</td>
+</tr>
+<tr>
+<td>pub_PageNum</td>
+<td><code>/robotis/action/page_num</code></td>
+<td>Int32</td>
+<td>Action page execution</td>
+</tr>
+<tr>
+<td>pub_HeadJoint</td>
+<td><code>robotis/head_control/set_joint_states</code></td>
+<td>JointState</td>
+<td>Head position</td>
+</tr>
+<tr>
+<td>pub_HeadScan</td>
+<td><code>robotis/head_control/scan_command</code></td>
+<td>String</td>
+<td>"scan"/"stop"</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h1>4. process.py — STATE MACHINE UTAMA</h1>
+<p><strong>File:</strong> <code>motion/src/process.py</code> | <strong>Baris:</strong> 1785 | <strong>Role:</strong> UTAMA/SECOND/GOTO</p>
+<h2>4.1 Subscribers</h2>
+<pre><code class="language-python">/robotis/open_cr/yaw              → yaw_heading (Int16 → yaw_fixed)
+/robotis/open_cr/imu              → imu_orientation (Imu → fall detection)
+/robotis/open_cr/button           → opencr_button2 (String → mode control)
+/robotis/goal_joint_states        → present_joint_states (JointState → head pan/tilt)
+DEWO/.../ball_state               → ball_state_status (BallState → FOUND/NOTFOUND)
+DEWO/.../coordinate               → ball_coordinate (BallCoordinate → pos + size)
+DEWO/.../goal_coordinate          → goal_coordinate (GoalCoordinate → goal pos)
+DEWO/.../goal_state               → goal_state_status (GoalState → FOUND/NOTFOUND)
+DEWO/MotionControl/pan_tilt_error → pan_tilt_error (Float32MultiArray → PID error)
+DEWO/Communication/robotinfo      → RobotInfo_Callback (RobotInfo → multi-robot)
+DEWO/Communication/from_udp_to_ros→ from_udp_to_ros (String → remote command)
+DEWO/Odometry/position            → location_Callback (Pose2D → X,Y,W global)
+DEWO/Odometry/goalangle           → goalangle_Callback (Float32 → heading goal)
+DEWO/GameController/allstate      → GCState_Callback (GameControllerState → status)
+</code></pre>
+<h2>4.2 Publishers</h2>
+<pre><code class="language-python">/DEWO/MotionControl/yaw              # yaw_fixed2 termormalisasi
+/DEWO/MotionControl/HeadPan          # Head pan angle
+/DEWO/MotionControl/Command          # &quot;start&quot;/&quot;stop&quot;/&quot;reset&quot;
+/DEWO/MotionControl/HeadScan         # Bool scan enable
+/DEWO/MotionControl/HeadTilt         # Head tilt angle
+/DEWO/MotionControl/ActionNum        # Action page number
+/DEWO/MotionControl/MotionModule     # &quot;walk&quot;/&quot;action&quot;/&quot;head&quot;
+/DEWO/MotionControl/WalkingParams    # WalkingParam
+/robotis/sync_write_item             # LED &amp; buzzer control
+/DEWO/Odometry/task                  # &quot;move&quot;/&quot;rotate&quot;/&quot;stay&quot;
+/DEWO/Odometry/cmd                   # &quot;start&quot;/&quot;stop&quot;
+/DEWO/Odometry/goal_position         # Target position (x,y)
+/DEWO/Odometry/initpoint             # Reset init position
+/DEWO/Communication/Task             # Taskcom broadcast
+/DEWO/Communication/Bodystate        # Fall state broadcast
+/DEWO/Communication/from_ros_to_udp  # Data ke jaringan
+/DEWO/.../tracking_state             # start/stop tracking
+/DEWO/.../positioning_state          # start/stop positioning
+</code></pre>
+<h2>4.3 Global Variables Penting</h2>
+<pre><code class="language-python">Status          # Game status: READY, SET, RUN, STOP, IDLE, dll
+Task            # Task saat ini: initial, follow_ball, positioning_kick, dll
+robotstatus     # Role: &quot;UTAMA&quot;, &quot;SECOND&quot;, &quot;GOTO&quot;
+Taskcom         # Broadcast task: &quot;fb&quot;, &quot;rt&quot;, &quot;posbl&quot;, &quot;kck&quot;, &quot;sc&quot;, dll
+
+yawHeading      # Raw yaw dari OpenCR (0-360°)
+yaw_fixed2      # Yaw ternormalisasi (-180° sd 180°)
+yawOffset       # Offset kalibrasi yaw
+
+ball_x, ball_y, ball_size    # Posisi &amp; ukuran bola dari vision
+ball_x_angle, ball_y_angle   # Sudut bola (pan/tilt + error)
+status_ball                  # 1 = FOUND, 0 = NOTFOUND
+
+goal_x, goal_y               # Posisi gawang dari vision
+status_goal                  # 1 = FOUND, 0 = NOTFOUND
+goal_orientation             # Heading ke gawang (dari odometry)
+
+X_global, Y_global, W_global # Posisi robot dari odometry
+pan_present, tilt_present    # Sudut head joint (radian)
+pan_error, tilt_error        # Error PID head tracking
+
+body_status                  # &quot;fallen_forward&quot;, &quot;fallen_backward&quot;, &quot;&quot;
+JERSEY                       # &quot;CYAN&quot; atau &quot;MAGENTA&quot;
+</code></pre>
+<h2>4.4 Game Status Handlers</h2>
+<h3>INITIAL → READY</h3>
+<pre><code class="language-python">if STATE == &quot;STATE_INITIAL&quot;:
+    initgate += 1
+    if initgate &lt;= 1:
+        Status = 'READY'
+</code></pre>
+<h3>READY → PRE_POSITIONING_KICKOFF</h3>
+<pre><code class="language-python">if STATE == 'STATE_READY':
+    readygate += 1
+    if readygate &lt;= 1:
+        Status = 'PRE_POSITIONING_KICKOFF'
+</code></pre>
+<h3>SET → PRE_STOP</h3>
+<pre><code class="language-python">if STATE == &quot;STATE_SET&quot;:
+    setgate += 1
+    if setgate &lt;= 1:
+        Status = 'SET'  # langsung jadi PRE_STOP
+</code></pre>
+<h3>PLAYING → PRE_RUN → RUN</h3>
+<pre><code class="language-python">if STATE == 'STATE_PLAYING':
+    playgate += 1
+    if playgate &lt;= 1:
+        Status = 'PRE_RUN'
+</code></pre>
+<h3>FINISHED → PRE_STOP</h3>
+<pre><code class="language-python">if STATE == 'STATE_FINISHED':
+    finishgate += 1
+    if finishgate &lt;= 1:
+        Status = 'PRE_STOP'
+</code></pre>
+<h2>4.5 Button Mode Flow</h2>
+<h3>Running Mode (default)</h3>
+<table>
+<thead>
+<tr>
+<th>Tombol</th>
+<th>Aksi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mode</code></td>
+<td>STOP→PRE_IDLE (duduk) atau IDLE→READY (berdiri)</td>
+</tr>
+<tr>
+<td><code>start</code></td>
+<td>STOP→PRE_RUN atau RUN→PRE_STOP (toggle)</td>
+</tr>
+<tr>
+<td><code>user</code></td>
+<td>Kalibrasi yaw ke 0°</td>
+</tr>
+<tr>
+<td><code>start_long</code></td>
+<td>Set initpoint ke "Positioning_Kick_Off"</td>
+</tr>
+<tr>
+<td><code>mode_long</code></td>
+<td>Masuk mode initpoint (Cyan area)</td>
+</tr>
+<tr>
+<td><code>user_long</code></td>
+<td>Masuk mode initpoint (Magenta area)</td>
+</tr>
+</tbody>
+</table>
+<h3>Initpoint Mode</h3>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th><code>start</code></th>
+<th><code>mode</code></th>
+<th><code>user</code></th>
+<th><code>mode_long</code></th>
+<th><code>user_long</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Cyan</strong></td>
+<td>CyanTengah</td>
+<td>-</td>
+<td>CyanBelakang</td>
+<td>Keluar mode</td>
+<td>CyanBelakang_seberang</td>
+</tr>
+<tr>
+<td><strong>Cyan</strong> (long)</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>CyanTengah_seberang</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>Magenta</strong></td>
+<td>MagentaTengah</td>
+<td>MagentaBelakang</td>
+<td>-</td>
+<td>MagentaBelakang_seberang</td>
+<td>Keluar mode</td>
+</tr>
+</tbody>
+</table>
+<h2>4.6 Com_decision() — Role Assignment</h2>
+<pre><code class="language-python">def Com_decision():
+    Alur:
+    1. Jika ada robot dengan Taskcom=&quot;kck&quot; → SECOND (hindari double-kick)
+    2. Jika ball_size ≥ threshold:
+       - Robot dengan ball_size terbesar → UTAMA
+       - Lainnya → SECOND
+    3. Jika ball_size ≥ range:
+       - Bandingkan yaw_fixed2 vs posw robot lain
+       - Yang lebih kecil offset yaw ke goal → UTAMA
+    4. Jika self fallen → SECOND
+    5. Jika teammate fallen → UTAMA
+    6. Jika ada yang &quot;rt&quot; atau &quot;posbl&quot; → SECOND
+    7. Jika tidak ada koneksi → UTAMA (standalone)
+</code></pre>
+<h2>4.7 Task Flow UTAMA (Detail)</h2>
+<h3>Task <code>initial</code> (baris 1537-1559)</h3>
+<pre><code class="language-python">- count_task += 1 tiap 1000ms
+- Motion_Start(), start_tracking(True), OdomStart()
+- Jika check_ball_lost(10): walk_follow_head dengan amove dari pan
+- Jika tidak: jalan lurus
+- setelah 3 siklus (count_task &gt; 2) → Task = 'follow_ball'
+</code></pre>
+<h3>Task <code>follow_ball</code> (baris 1561-1594)</h3>
+<pre><code class="language-python">- Com_decision() tiap siklus
+- Taskcom = &quot;fb&quot;
+- xmove, ymove, amove = walk_follow_head(pan_present, tilt_present)
+- walking(xmove, ymove, amove, 0.63)
+- If tilt_degree &lt; -60 → Task = 'heading_to_goal_first'
+- Jika ball lost 20 frame: scanning (rotasi acak kiri/kanan)
+</code></pre>
+<h3>Task <code>heading_to_goal_first</code> (baris 1596-1619)</h3>
+<pre><code class="language-python">- Jika ball lost → kembali ke follow_ball
+- Jika yaw_fixed2 dalam ±5° dari goal_orientation:
+  → Goalposition(JERSEY), Task = 'positioning_kick'
+- Jika tidak: walk_rotate2(goal_orientation)
+</code></pre>
+<h3>Task <code>positioning_kick</code> (baris 1621-1674)</h3>
+<pre><code class="language-python">- Goalposition(JERSEY) untuk update goal_orientation
+- Jika yaw dalam ±10°:
+  - walk_ball_position_to_kick(target_pan=1.0, target_tilt=-74, heading)
+  - Syarat located: delta_pan&lt;2, delta_tilt&lt;13, ball_size&gt;4000
+  - count_goal_found &gt; 2 → kick_ball
+- Jika yaw di luar toleransi: walk_rotate22(goal_orientation)
+- Jika ball lost: scanning, Task kembali ke heading_to_goal_first
+</code></pre>
+<h3>Task <code>kick_ball</code> (baris 1676-1712)</h3>
+<pre><code class="language-python">- OdomStop()
+- ball_x_angle &lt; 0 → action 230 (Right Kick)
+- ball_x_angle &gt; 0 → action 225 (Left Kick)
+- Taskcom = &quot;kck&quot;
+- Setelah kick: Motion_InitWalking(), Motion_Start()
+- Task kembali ke 'initial'
+</code></pre>
+<h3>Task <code>get_up</code> (baris 1713-1735)</h3>
+<pre><code class="language-python">- OdomStop()
+- fallen_forward → action 122 (bangun depan)
+- fallen_backward → action 66 (bangun belakang)
+- Setelah bangun → walk_ready → initial
+</code></pre>
+<h2>4.8 Walk Functions</h2>
+<h3>walk_follow_head (baris 848)</h3>
+<pre><code class="language-python">pan_degree → a_move (map -89..89 ke -15..15)
+abs(a_move) → x_move (map 0..15 ke 20..0)
+tilt_degree → x_move_tilt (map tilt_min..0 ke x_move..-0.008)
+return x_move_tilt*0.001, 0, a_move  # x dalam meter
+</code></pre>
+<h3>walk_ball_position_to_kick (baris 1199)</h3>
+<pre><code class="language-python">target_pan=1.0, target_tilt=-74
+delta_pan = target_pan - pan_degree
+delta_tilt = target_tilt - tilt_degree
+
+x_move dari delta_tilt_pan (delta_tilt + abs(delta_pan)*0.3)
+y_move dari pan_degree vs target_pan
+a_move dari Heading_Gap(heading, yaw_fixed2)
+
+located = (delta_pan &gt; -2 dan &lt; 2) dan delta_tilt &lt; 13 dan ball_size &gt; 4000
+</code></pre>
+<h3>walk_to_position (baris 864)</h3>
+<pre><code class="language-python">distance = sqrt((x - X_global)² + (y - Y_global)²)
+gap = Heading_Gap(goal_orientation, yaw_fixed2)
+
+Mode 'move':
+  - a_move = map(gap, -180..180, -15..15)
+  - x_move dari abs(a_move) dan distance
+  - y_move = PID(gap, 0) / 30 (clamp ±15)
+  - Jika X dalam ±6 dari target → mode 'netral'
+
+Mode 'netral':
+  - x_move = -4 (mundur sedikit)
+  - Rotasi halus ke target heading
+  - Jika yaw dalam ±6° dari target → in_position = True
+</code></pre>
+<h3>walk_rotate2 (baris 932)</h3>
+<pre><code class="language-python">heading_gap = Heading_Gap(heading, yaw_fixed2)
+delta_tilt = -57 - tilt_degree
+
+x_move dari delta_tilt (maju/mundur biar dapet sudut pandang)
+y_move = PID(heading_gap, 0) / 30 (clamp ±15)
+a_move = map(pan_degree, -10..10, -6..6)
+</code></pre>
+<h2>4.9 Utility Functions</h2>
+<h3>Heading_Gap (baris 815)</h3>
+<pre><code class="language-python">Menghitung selisih sudut terpendek antara goal dan yaw.
+Handle kasus跨越 0°/180° boundary:
+- Jika goal positif dan yaw negatif (atau sebaliknya):
+  Hitung gap via 0° dan via 180°, pilih yang lebih pendek
+- Lainnya: gap = goal_orientation - yaw_fixed2
+</code></pre>
+<h3>calculate_pid (baris 723)</h3>
+<pre><code class="language-python">kp = 8.0, ki = 5.0, kd = 15.0
+error = set_point - val
+rateError = error - lastError
+out = kp*error + kd*rateError  # (ki tidak dipakai - dikomentari)
+</code></pre>
+<h3>map_value vs map_value2</h3>
+<pre><code class="language-python">map_value:  Dengan clamping (nilai dibatasi min/max source)
+map_value2: Tanpa clamping (bisa di luar range)
+</code></pre>
+<h3>check_ball_lost (baris 793)</h3>
+<pre><code class="language-python">Counter: setiap frame tanpa bola → ball_was_lost++
+Jika ball_was_lost ≥ threshold → return 1 (lost)
+Jika bola ketemu → reset counter
+</code></pre>
+<hr />
+<h1>5. process_baru.py — STATE MACHINE VERSI BARU</h1>
+<p><strong>File:</strong> <code>motion/src/process_baru.py</code> | <strong>Baris:</strong> 1265</p>
+<h2>5.1 Perbedaan dari process.py</h2>
+<table>
+<thead>
+<tr>
+<th>Aspek</th>
+<th>process.py</th>
+<th>process_baru.py</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Role system</td>
+<td>UTAMA/SECOND/GOTO (Com_decision)</td>
+<td>Single robot (tanpa multi-role)</td>
+</tr>
+<tr>
+<td>Ball topic</td>
+<td><code>/DEWO/.../coordinate</code></td>
+<td><code>/v9_ball_detector_node/ball_cordinate</code></td>
+</tr>
+<tr>
+<td>Komunikasi</td>
+<td>Ada (robotinfo, from_udp_to_ros)</td>
+<td>Tidak ada</td>
+</tr>
+<tr>
+<td>RobotInfo</td>
+<td>Ada (RobotInfo_Callback)</td>
+<td>Tidak ada</td>
+</tr>
+<tr>
+<td>Taskcom</td>
+<td>Ada broadcast ke UDP</td>
+<td>Tidak ada</td>
+</tr>
+<tr>
+<td>HEADING_TO_GOAL</td>
+<td>2 tahap (first + second)</td>
+<td>1 tahap langsung ke positioning</td>
+</tr>
+<tr>
+<td>Kick action</td>
+<td>225/230 (langsung)</td>
+<td>176-183 (sequential)</td>
+</tr>
+<tr>
+<td>yaw handling</td>
+<td>Filter anti-loncat 179°</td>
+<td>Langsung, tanpa filter</td>
+</tr>
+</tbody>
+</table>
+<h2>5.2 Status Lifecycle</h2>
+<pre><code class="language-python">INITIAL → READY → STANDBY → STOP
+               ↘ RUN (langsung dari READY)
+                    ↕ (toggle via button start)
+               PRE_STOP
+
+Catatan: Tidak ada PRE_POSITIONING_KICKOFF
+         STATE_READY → langsung RUN, Task = &quot;Positioning&quot;
+</code></pre>
+<h2>5.3 Task Flow</h2>
+<pre><code>initial (2 siklus × 1000ms)
+  ↓
+follow_ball (tilt &lt; -50 → heading_to_goal_first)
+  ↓
+heading_to_goal_first (yaw ±15° → heading_to_goal_second)
+  ↓
+heading_to_goal_second (walk_ball_positioning_to_goal)
+  ↓                        (atau yaw ±5° → positioning_kick)
+positioning_kick (walk_ball_position_to_kick)
+  ↓
+kick_ball (action 176-183)
+  ↓
+initial (loop)
+</code></pre>
+<h2>5.4 Parameters Berbeda</h2>
+<pre><code class="language-python">walk_follow_head:
+  a_move_max = 15.0
+  x_move_max = 30.0 (vs 20.0 di process.py)
+  tilt_min = -50 (vs -61 di process.py)
+
+positioning_kick condition:
+  (delta_pan &lt; 4 and delta_tilt &lt; 4) or ball_size &gt; 3000
+  (vs delta_pan &gt; -2 dan &lt; 2, delta_tilt &lt; 13, ball_size &gt; 4000)
+
+kick_ball action:
+  ball_x_angle &lt; 0: action 180,181,182,183 (sequential)
+  ball_x_angle &gt; 0: action 176,177,178,179 (sequential)
+</code></pre>
+<h2>5.5 Head Control yang Berbeda</h2>
+<pre><code class="language-python"># process_baru.py panggil Motion_HeadControl langsung
+Motion_HeadControl(0.0, -0.20)  # Setelah kick
+# vs process.py yang set headTilt dulu
+</code></pre>
+<hr />
+<h1>6. VARIAN PROCESS LAINNYA</h1>
+<h2>6.1 proses_baru_2025.py</h2>
+<p><strong>Baris:</strong> ~2000 | <strong>Profile:</strong> Dual (OP3 + Quintic) | <strong>Komunikasi:</strong> Tidak | <strong>Gyro:</strong> Ya</p>
+<p><strong>Finite State Machine lengkap dengan lane zones:</strong></p>
+<pre><code class="language-python">class FSM:
+    states = ['POSITIONING', 'SearchBall', 'Tracking', 'KickBall', 'Rotate', 'GotoBall']
+</code></pre>
+<p><strong>Lane zones untuk positioning:</strong></p>
+<pre><code class="language-python"># 4 lane zones berdasarkan kondisi pertandingan
+lane1: Zona kiri belakang
+lane2: Zona kanan belakang
+lane3: Zona kiri depan
+lane4: Zona kanan depan
+</code></pre>
+<p><strong>Fitur:</strong><br />
+- Mode debug dengan print<br />
+- State machine dengan transisi eksplisit<br />
+- Pengaturan walking period yang berbeda tiap state<br />
+- Dual profile support (PROFILE_QUINTIC = True/False)</p>
+<h2>6.2 proses_noncom.py</h2>
+<p><strong>Baris:</strong> ~1700 | <strong>Profile:</strong> Quintic only | <strong>Komunikasi:</strong> Tidak | <strong>Gyro:</strong> Ya</p>
+<p><strong>Sama seperti proses_baru_2025.py</strong> tanpa komunikasi. Menggunakan <code>quintic_walk_msgs.msg.WalkingParam</code> secara eksklusif.</p>
+<p><strong>State machine:</strong></p>
+<pre><code class="language-python">POSITIONING → SearchBall → Tracking → KickBall → Rotate → GotoBall
+                  ↑                                            |
+                  +--------------------------------------------+
+</code></pre>
+<h2>6.3 proses_noncom_nogyro.py</h2>
+<p><strong>Baris:</strong> ~1400 | <strong>Profile:</strong> Original OP3 | <strong>Komunikasi:</strong> Tidak | <strong>Gyro:</strong> Tidak</p>
+<p><strong>Versi paling sederhana:</strong><br />
+- Tidak ada komunikasi multi-robot<br />
+- Tidak ada gyro (mengandalkan yaw dari OpenCR)<br />
+- Menggunakan <code>op3_walking_module_msgs.msg.WalkingParam</code><br />
+- State machine lebih sederhana</p>
+<h2>6.4 process_com_beta.py</h2>
+<p><strong>Baris:</strong> ~2000 | <strong>Profile:</strong> Dual | <strong>Komunikasi:</strong> Ya (RobotInfo) | <strong>Gyro:</strong> Ya</p>
+<p><strong>Fitur komunikasi multi-robot:</strong></p>
+<pre><code class="language-python">rospy.Subscriber(&quot;/DEWO/Communication/robotinfo&quot;, RobotInfo, RobotInfo_Callback)
+rospy.Subscriber(&quot;/DEWO/Communication/from_udp_to_ros&quot;, String, from_udp_to_ros)
+</code></pre>
+<p><strong>Gate counters untuk state transitions:</strong></p>
+<pre><code class="language-python">readygate = initgate = setgate = playgate = finishgate = 0
+# Mencegah multiple trigger pada state yang sama
+</code></pre>
+<p><strong>Publikasi team positions:</strong></p>
+<pre><code class="language-python"># Publish posisi robot sendiri via UDP
+from_ros_to_udp.publish(json_data)
+</code></pre>
+<h2>6.5 process_wilayah_shooter.py</h2>
+<p><strong>Baris:</strong> ~700 | <strong>Profile:</strong> Simplified | <strong>Role:</strong> Shooter</p>
+<p><strong>Untuk kontes regional (wilayah):</strong></p>
+<pre><code class="language-python"># Ball detection dari topic berbeda
+rospy.Subscriber(&quot;/op3_ball_detector/ball_position&quot;, Pose, ball_position_Callback)
+
+# Task list sederhana:
+POSITIONING → DRIBBLING → KICKING → STOP
+</code></pre>
+<h2>6.6 process_wilayah_kickoff.py</h2>
+<p><strong>Baris:</strong> ~300 | <strong>Profile:</strong> Simplified | <strong>Role:</strong> Kickoff</p>
+<p><strong>Untuk eksekusi kickoff saja:</strong></p>
+<pre><code class="language-python"># Sangat sederhana, hanya untuk positioning + kick
+Task = &quot;POSITIONING&quot; → &quot;KICKING&quot; → &quot;STOP&quot;
+</code></pre>
+<h2>6.7 projecttes.py</h2>
+<p><strong>Baris:</strong> ~2000 | <strong>Profile:</strong> Dual | <strong>Komunikasi:</strong> Ya | <strong>Fitur:</strong> Sequence Buffer</p>
+<p><strong>Prototype dengan sequencing:</strong></p>
+<pre><code class="language-python">Sequence_Buffer = []       # Buffer untuk eksekusi berurutan
+Step_counter = 0           # Counter langkah dalam sequence
+</code></pre>
+<p>State machine lengkap dengan komunikasi multi-robot + dual walk profile.</p>
+<h2>6.8 mlaku.py</h2>
+<p><strong>Baris:</strong> ~1700 | <strong>Profile:</strong> Quintic only</p>
+<p><strong>Duplikat dari proses_noncom.py</strong> (mlaku = "jalan" dalam bahasa Jawa).</p>
+<hr />
+<h1>7. driver.py — LOW-LEVEL DRIVER</h1>
+<p><strong>File:</strong> <code>motion/src/driver.py</code> | <strong>Baris:</strong> 587</p>
+<h2>7.1 Fungsi Utama</h2>
+<ol>
+<li>Menerima perintah dari process.py via 6 topic subscriber</li>
+<li>Mengontrol module robotis: walking, action, head control</li>
+<li>PID head tracking untuk bola dan gawang</li>
+<li>Mempublikasikan joint kaki untuk odometry</li>
+</ol>
+<h2>7.2 Status &amp; Mode</h2>
+<pre><code class="language-python">STATUS_STARTUP = &quot;startup&quot;    # Inisialisasi
+STATUS_ERROR   = &quot;error&quot;      # Error
+STATUS_STOP    = &quot;stop&quot;       # Berhenti
+STATUS_STANDBY = &quot;standby&quot;    # Siap
+STATUS_RUN     = &quot;run&quot;        # Berjalan
+
+MODE_NONE   = &quot;none&quot;          # Tidak ada module
+MODE_WALK   = &quot;walk&quot;          # Walking module aktif
+MODE_ACTION = &quot;action&quot;        # Action module aktif
+MODE_HEAD   = &quot;head&quot;          # Head control module aktif
+</code></pre>
+<h2>7.3 Module Switching Logic</h2>
+<pre><code class="language-python">def MotionModule_Callback(data):
+    if data.data == MODE_WALK:
+        if status == standby/stop:
+            EnableCtrlModule(&quot;walking_module&quot;)
+            motionModule = MODE_WALK
+    elif data.data == MODE_ACTION:
+        if status == standby/stop:
+            EnableCtrlModule(&quot;action_module&quot;)
+            motionModule = MODE_ACTION
+    elif data.data == MODE_HEAD:
+        EnableCtrlModule(&quot;head_control_module&quot;)
+        # head bisa diaktifkan kapan saja
+</code></pre>
+<h2>7.4 Command Logic</h2>
+<pre><code class="language-python">def Command_Callback(data):
+    if data.data == &quot;start&quot;:
+        if status == stop:
+            WalkingCommand(&quot;start&quot;)
+            taskStatus = STATUS_RUN
+    elif data.data == &quot;stop&quot;:
+        WalkingCommand(&quot;stop&quot;)
+        taskStatus = STATUS_STOP
+    elif data.data == &quot;reset&quot;:
+        WalkingCommand(&quot;stop&quot;)  # jika running
+        InitPose()
+        taskStatus = STATUS_STANDBY
+</code></pre>
+<h2>7.5 PID Head Tracking</h2>
+<h3>Tracking Bola (baris 192-253)</h3>
+<pre><code class="language-python">p_gain = 0.265
+i_gain = 0.0
+d_gain = 0.02
+
+x_err = -arctan(x * arctan(w))  # w = 35.2° FOV horizontal
+y_err = -arctan(y * arctan(h))  # h = 21.6° FOV vertikal
+
+x_err_diff = (x_err - pan) / delta_time
+y_err_diff = (y_err - tilt) / delta_time
+
+x_err_target = x_err * p_gain + x_err_diff * d_gain
+y_err_target = y_err * p_gain + y_err_diff * d_gain
+</code></pre>
+<h3>Tracking Gawang (baris 255-303)</h3>
+<pre><code class="language-python">p_gain = 0.08    # Lebih kecil dari bola (lebih lambat)
+i_gain = 0.0
+d_gain = 0.028
+
+# Error calculation sama dengan bola
+</code></pre>
+<h2>7.6 Main Loop (baris 531-587)</h2>
+<pre><code class="language-python">Loop 10Hz:
+  1. Jika tracking_state == &quot;start&quot; dan ball FOUND:
+     set_head_joint_offset(x_err_target, y_err_target)
+  2. Jika tracking_state == &quot;start&quot; dan ball NOTFOUND:
+     head_start_scan() (setelah 20 frame lost)
+  3. Jika positioning_state == &quot;start&quot; dan goal FOUND:
+     set_head_joint_offset(x_err_target, y_err_target)
+  4. Jika positioning_state == &quot;start&quot; dan goal NOTFOUND:
+     head_start_scan() (setelah 5 frame lost)
+  5. Jika walking params berubah → publish ke robotis
+  6. Jika head joint berubah → publish ke robotis
+  7. Tiap 100ms → publish gyroYawIntegrator
+</code></pre>
+<h2>7.7 Publishers</h2>
+<pre><code class="language-python">pub_JointKaki       → /DEWO/Odometry/jointkaki
+pub_WalkingParams   → /robotis/walking/set_params
+pub_WalkingCommand  → /robotis/walking/command
+pub_EnableCtrlModule→ /robotis/enable_ctrl_module
+pub_InitPose        → /robotis/base/ini_pose
+pub_PageNum         → /robotis/action/page_num
+pub_HeadJoint       → robotis/head_control/set_joint_states
+pub_HeadScan        → robotis/head_control/scan_command
+pub_TaskStatus      → /KRSBI/Manuvering/Status
+pub_YawPos          → /KRSBI/Manuvering/Sensor/Gyro/Yaw
+headoffsetpub       → /robotis/head_control/set_joint_states_offset
+pantilterror        → /DEWO/MotionControl/pan_tilt_error
+</code></pre>
+<hr />
+<h1>8. driver_baru_2025.py — DRIVER TERBARU</h1>
+<p><strong>File:</strong> <code>motion/src/driver_baru_2025.py</code> | <strong>Baris:</strong> ~2500</p>
+<h2>8.1 Perbedaan dari driver.py</h2>
+<table>
+<thead>
+<tr>
+<th>Aspek</th>
+<th>driver.py</th>
+<th>driver_baru_2025.py</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Walk profile</td>
+<td>Original OP3 only</td>
+<td>Dual (OP3 + Quintic)</td>
+</tr>
+<tr>
+<td>Walking params topic</td>
+<td><code>/robotis/walking/set_params</code></td>
+<td><code>/robotis/quintic_walk/set_params</code></td>
+</tr>
+<tr>
+<td>Profile selection</td>
+<td>Tidak ada</td>
+<td><code>PROFILE_QUINTIC</code> constant</td>
+</tr>
+<tr>
+<td>Proses state machine</td>
+<td>Built-in di main loop</td>
+<td>State machine + processed</td>
+</tr>
+<tr>
+<td>Button handling</td>
+<td>Tidak ada</td>
+<td>Ada (OpenCR button + mode)</td>
+</tr>
+<tr>
+<td>Gyro yaw publish</td>
+<td>Ada</td>
+<td>Ada (lebih detail)</td>
+</tr>
+</tbody>
+</table>
+<h2>8.2 Dual Profile Support</h2>
+<pre><code class="language-python">PROFILE_QUINTIC = True   # Ubah ke False untuk OP3 walk
+
+if PROFILE_QUINTIC:
+    # Subscribe ke quintic_walk_msgs
+    rospy.Subscriber(&quot;/robotis/quintic_walk/set_params&quot;, ...)
+else:
+    # Subscribe ke op3_walking_module_msgs
+    rospy.Subscriber(&quot;/robotis/walking/set_params&quot;, ...)
+</code></pre>
+<h2>8.3 Walking Parameters (Quintic Profile)</h2>
+<pre><code class="language-python">WalkingParam_msg = WalkingParam()
+# Parameter spesifik untuk quintic walk engine:
+# trunkXOffset, trunkYOffset, trunkPitch, setpointPitch
+# YMove, XMove, period_time, doubleSupportRatio
+</code></pre>
+<h2>8.4 Fitur Tambahan</h2>
+<ul>
+<li><strong>Control loop rate:</strong> 10Hz</li>
+<li><strong>Publish multiple status topics</strong></li>
+<li><strong>Subscriber untuk processed command</strong> (selain dari motion module)</li>
+<li><strong>Joint state monitoring</strong> lebih detail</li>
+<li><strong>Button handling</strong> untuk mode running dan initpoint</li>
+</ul>
+<h2>8.5 driver_.py</h2>
+<p><strong>File:</strong> <code>motion/src/driver_.py</code> | <strong>Baris:</strong> ~2500</p>
+<p>Hampir identik dengan <code>driver_baru_2025.py</code> tetapi:<br />
+- <strong>Tidak memiliki konstanta <code>PROFILE_QUINTIC</code></strong><br />
+- Hanya support original OP3 walk profile<br />
+- Kemungkinan versi sebelum quintic walk diimplementasikan</p>
+<hr />
+<h1>9. VARIAN DRIVER LAINNYA</h1>
+<h2>9.1 keeper_driver.py</h2>
+<p><strong>File:</strong> <code>motion/src/keeper_driver.py</code> | <strong>Baris:</strong> ~200</p>
+<p>Driver yang disederhanakan untuk <strong>keeper (kiper)</strong>:</p>
+<p><strong>Perbedaan dari driver.py:</strong></p>
+<pre><code class="language-python"># Tidak punya:
+- WalkingParam subscriber (tidak butuh gait tuning)
+- Odometry goal_position subscriber
+- Quintic walk profile support
+- ActionNum subscriber (maybe - tergantung implementasi)
+
+# Punya:
+- gyroYawIntegrator publish
+- Ball tracking PID (sederhana)
+</code></pre>
+<p><strong>Penting:</strong> Driver kiper sudah ada, tapi <strong>keeper_proses.py masih kosong</strong> — belum ada logika strategi kiper.</p>
+<hr />
+<h1>10. ODOMETRY SYSTEM</h1>
+<h2>10.1 Prinsip Dead-Reckoning</h2>
+<p>Odometry Gandamana menggunakan <strong>kinematika kaki</strong> (forward kinematics) untuk menghitung perpindahan robot. Tidak menggunakan visual odometry atau encoder roda.</p>
+<p>Setiap langkah:<br />
+1. Baca sudut joint kaki → ForwardOdom() → displacement (X, Y, Angle)<br />
+2. Akumulasi ke posisi global → position()<br />
+3. Kirim ke process.py via Pose2D</p>
+<h2>10.2 odometry_baru_2025.py (Terbaru, Direkomendasikan)</h2>
+<p><strong>File:</strong> <code>motion/src/odometry_baru_2025.py</code> | <strong>Baris:</strong> 444</p>
+<h3>WalkingParam dari Quintic Walk</h3>
+<pre><code class="language-python">rospy.Subscriber(&quot;/robotis/quintic_walk/set_params&quot;, WalkingParam, WalkingParam_Callback)
+# Parameter:
+x_offset = data.trunkXOffset * 100   # m → cm
+y_offset = data.trunkYOffset * 100
+p_offset = data.trunkPitch
+hip_offset = data.setpointPitch
+swim = data.YMove                    # Untuk deteksi arah side step
+</code></pre>
+<h3>Forward Kinematics (ForwardOdom)</h3>
+<pre><code class="language-python">P = 12    # paha (cm)
+B = 12    # betis (cm)
+K = 3.05  # telapak kaki (cm)
+
+def ForwardOdom(PG, LT, GL):
+    # PG = pinggul, LT = lutut, GL = kaki
+    Hr = P*cos(PG) + B*cos(PG+LT) + K*cos(PG+LT-GL)   # tinggi kaki kanan
+    Hl = P*cos(-PG) + B*cos(-PG-LT) + K*cos(-PG-LT+GL) # tinggi kaki kiri
+    Xr = P*sin(PG) + B*sin(PG+LT) + K*sin(PG+LT-GL) - x_offset
+    Xl = P*sin(-PG) + B*sin(-PG-LT) + K*sin(-PG-LT+GL) - x_offset
+    return Hr, Hl, Xr, Xl
+</code></pre>
+<h3>Side Kinematics (SideOdom)</h3>
+<pre><code class="language-python">def SideOdom(PG, GL, PB):
+    base = PB * sin(-PG)
+    step = K * sin(-PG + GL)
+    Yr = base + step - y_offset/2
+    Yl = base + step + y_offset/2
+    return Yr, Yl
+</code></pre>
+<h3>Angle Kinematics (AngleOdom)</h3>
+<pre><code class="language-python">def AngleOdom(Rpg, Lpg):
+    Angle = abs(Rpg) + abs(Lpg)
+    return Angle
+</code></pre>
+<h3>XMove &amp; YMove (Akumulasi Displacement)</h3>
+<pre><code class="language-python">def XMove(Swap, Move, Angle):
+    noise = 1.3
+    swapX = -Swap
+    X = moveX + swapX + noise
+    moveX = Move
+    return X, Angle
+
+def YMove(supportY, swingY, Angle):
+    Y = swingY - supportY
+    return Y, Angle
+</code></pre>
+<h3>Position Accumulation</h3>
+<pre><code class="language-python">def position(X, Y, W):
+    W_global = deg2rad(W_global)
+    # XMOVE
+    X_global += X * cos(W_global)
+    Y_global -= X * sin(W_global)
+    # YMOVE
+    X_global += Y * cos(pi/2 + W_global)
+    Y_global -= Y * sin(pi/2 + W_global)
+    position_Pub(X_global, Y_global, rad2deg(W_global))
+</code></pre>
+<h3>Phase-Locked Trigger</h3>
+<pre><code class="language-python"># Hanya hitung saat fase ganti (mencegah double-counting)
+if fase in [&quot;1&quot;, &quot;2&quot;, &quot;3&quot;]:
+    trigger_odometri = True
+
+if trigger_odometri:
+    if fase == &quot;2&quot;: leg = 0  # kaki kanan
+    else: leg = 1            # kaki kiri
+    # Hitung displacement sesuai task
+    position(X_curr, Y_curr, W_curr)
+</code></pre>
+<h3>Goal Angle Calculation</h3>
+<pre><code class="language-python">def goalposition_Callback(data):
+    delta_x = data.x - X_global
+    delta_y = data.y - Y_global
+    w_goal = arctan2(-delta_y, delta_x)
+    # -delta_y karena koordinat Y terbalik dengan pygame
+    GoalAnglePub.publish(rad2deg(w_goal))
+</code></pre>
+<h3>Task Modes</h3>
+<pre><code class="language-python">&quot;move&quot;:        ForwardOdom + XMove (maju/mundur)
+&quot;rotate&quot;:      SideOdom + YMove (geser samping + rotasi)
+&quot;stay&quot;:        AngleOdom aja (diam, tracking rotasi aja)
+&quot;positioning&quot;: Semua komponen (move + rotate + side)
+</code></pre>
+<h2>10.3 odometry.py (Original)</h2>
+<p><strong>File:</strong> <code>motion/src/odometry.py</code> | <strong>Baris:</strong> 398</p>
+<h3>Perbedaan dari odometry_baru_2025.py</h3>
+<table>
+<thead>
+<tr>
+<th>Aspek</th>
+<th>odometry.py</th>
+<th>odometry_baru_2025.py</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Walking param from</td>
+<td><code>/robotis/walking/set_params</code></td>
+<td><code>/robotis/quintic_walk/set_params</code></td>
+</tr>
+<tr>
+<td>WalkingParam msg</td>
+<td><code>op3_walking_module_msgs</code></td>
+<td><code>quintic_walk_msgs</code></td>
+</tr>
+<tr>
+<td>Parameter naming</td>
+<td><code>init_x_offset</code>, <code>dsp_ratio</code></td>
+<td><code>trunkXOffset</code>, <code>doubleSupportRatio</code></td>
+</tr>
+<tr>
+<td>Phase topic</td>
+<td><code>/DEWO/phase</code></td>
+<td><code>/DEWO/Walking/Phase</code></td>
+</tr>
+<tr>
+<td>Phase trigger</td>
+<td>Manual (count)</td>
+<td>Otomatis (trigger_odometri)</td>
+</tr>
+<tr>
+<td>YMove</td>
+<td>Sederhana</td>
+<td>Dengan swim detection</td>
+</tr>
+</tbody>
+</table>
+<h3>WalkingParam OP3 vs Quintic</h3>
+<p><strong>OP3 (<code>odometry.py</code>):</strong></p>
+<pre><code class="language-python">x_offset = data.init_x_offset * 100
+y_offset = data.init_y_offset * 100
+p_offset = data.init_pitch_offset
+hip_offset = data.hip_pitch_offset
+periode = data.period_time
+DSP_ratio = data.dsp_ratio
+</code></pre>
+<p><strong>Quintic (<code>odometry_baru_2025.py</code>):</strong></p>
+<pre><code class="language-python">x_offset = data.trunkXOffset * 100
+y_offset = data.trunkYOffset * 100
+p_offset = data.trunkPitch
+hip_offset = data.setpointPitch
+swim = data.YMove  # untuk deteksi arah
+DSP_ratio = data.doubleSupportRatio
+</code></pre>
+<h3>YMove yang Berbeda</h3>
+<p><strong>odometry.py:</strong></p>
+<pre><code class="language-python">YMove(-L_side, R_side, -Angle)  # leg kiri
+YMove(-R_side, L_side, Angle)   # leg kanan
+</code></pre>
+<p><strong>odometry_baru_2025.py:</strong></p>
+<pre><code class="language-python"># Tergantung arah swim (side step)
+if swim_cek == &quot;kiri&quot;:
+    YMove(R_side, L_side, -Angle)
+elif swim_cek == &quot;kanan&quot;:
+    YMove(L_side, R_side, Angle)
+</code></pre>
+<h2>10.4 odometry_bno.py</h2>
+<p><strong>File:</strong> <code>motion/src/odometry_bno.py</code> | <strong>Baris:</strong> ~1500</p>
+<h3>Fitur</h3>
+<ul>
+<li>Menggunakan <strong>IMU BNO055</strong> untuk heading feedback</li>
+<li>Subscribe ke <code>/DEWO/Odometry/jointkaki</code> (JointKaki msg)</li>
+<li>Menggunakan <code>quintic_walk_msgs.msg.WalkingParam</code></li>
+<li>Publikasi Pose2D odometry dan Float32 yaw</li>
+</ul>
+<h3>Kelebihan</h3>
+<ul>
+<li>Heading dari IMU lebih akurat daripada dead-reckoning murni</li>
+<li>BNO055 memiliki sensor fusion internal (accelerometer + gyro + magnetometer)</li>
+</ul>
+<h3>Kekurangan</h3>
+<ul>
+<li>Lebih kompleks (1500 baris)</li>
+<li>Bergantung pada IMU yang bisa kena drift magnetik</li>
+</ul>
+<h2>10.5 odometry_new.py</h2>
+<p><strong>File:</strong> <code>motion/src/odometry_new.py</code> | <strong>Baris:</strong> ~700</p>
+<h3>Fitur</h3>
+<ul>
+<li>Membaca <code>/robotis/goal_joint_states</code> <strong>langsung</strong> (tanpa JointKaki msg)</li>
+<li>Tanpa ketergantungan IMU</li>
+<li>Lebih sederhana dari odometry_bno.py</li>
+</ul>
+<h3>Kelebihan</h3>
+<ul>
+<li>Sederhana, mudah di-debug</li>
+<li>Tidak butuh IMU</li>
+</ul>
+<h3>Kekurangan</h3>
+<ul>
+<li>Akurasi lebih rendah (tanpa feedback IMU)</li>
+</ul>
+<h2>10.6 odometry_nongyro.py</h2>
+<p><strong>File:</strong> <code>motion/src/odometry_nongyro.py</code> | <strong>Baris:</strong> ~900</p>
+<h3>Fitur</h3>
+<ul>
+<li>FK sama dengan odometry_bno.py</li>
+<li>Heading dari <strong>yaw eksternal</strong> (OpenCR / topic lain)</li>
+<li>Tidak menggunakan gyro/IMU internal</li>
+<li>Menggunakan <code>quintic_walk_msgs.msg.WalkingParam</code></li>
+</ul>
+<hr />
+<h1>11. lapangan.py — FIELD VISUALIZATION</h1>
+<p><strong>File:</strong> <code>motion/src/lapangan.py</code> | <strong>Baris:</strong> 136</p>
+<h2>11.1 Spesifikasi</h2>
+<table>
+<thead>
+<tr>
+<th>Aspek</th>
+<th>Nilai</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Library</td>
+<td>Pygame</td>
+</tr>
+<tr>
+<td>Resolusi</td>
+<td>1040 × 660 pixel</td>
+</tr>
+<tr>
+<td>FPS Target</td>
+<td>100</td>
+</tr>
+<tr>
+<td>Judul</td>
+<td>"KRSBI-H: 'GANDAMANA' UNIVERSITAS NEGERI SURABAYA"</td>
+</tr>
+<tr>
+<td>Skala (P)</td>
+<td>1 (1 unit = 1 pixel)</td>
+</tr>
+</tbody>
+</table>
+<h2>11.2 Dimensi Lapangan</h2>
+<table>
+<thead>
+<tr>
+<th>Elemen</th>
+<th>Internal</th>
+<th>Visual (P=1)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Panjang field</td>
+<td>900</td>
+<td>900 px</td>
+</tr>
+<tr>
+<td>Lebar field</td>
+<td>600</td>
+<td>600 px</td>
+</tr>
+<tr>
+<td>Goal Area width</td>
+<td>100</td>
+<td>100 px</td>
+</tr>
+<tr>
+<td>Goal Area height</td>
+<td>500</td>
+<td>500 px</td>
+</tr>
+<tr>
+<td>Center circle radius</td>
+<td>75</td>
+<td>75 px</td>
+</tr>
+<tr>
+<td>Penalty radius</td>
+<td>210</td>
+<td>210 px</td>
+</tr>
+<tr>
+<td>Goal width</td>
+<td>260</td>
+<td>260 px</td>
+</tr>
+<tr>
+<td>Goal depth</td>
+<td>60</td>
+<td>60 px</td>
+</tr>
+<tr>
+<td>Line width</td>
+<td>6</td>
+<td>6 px</td>
+</tr>
+<tr>
+<td>Offset X (nolX)</td>
+<td>-</td>
+<td>69 px</td>
+</tr>
+<tr>
+<td>Offset Y (nolY)</td>
+<td>-</td>
+<td>30 px</td>
+</tr>
+</tbody>
+</table>
+<h2>11.3 Warna &amp; Area</h2>
+<pre><code class="language-python">CYAN area    = Rect(0, 0, 520, 660)     # Setengah kiri
+MAGENTA area = Rect(520, 0, 520, 660)   # Setengah kanan
+Background   = dark red
+Field        = green (0, 200, 0)
+Lines        = white
+Cyan accent  = blue (atas field)
+Magenta accent = red (atas field)
+Juri line    = black (bawah field)
+</code></pre>
+<h2>11.4 Elemen yang Digambar</h2>
+<ol>
+<li>Background dark red</li>
+<li>Area CYAN (biru) + MAGENTA (merah)</li>
+<li>Background gawang + lapangan (hijau)</li>
+<li>Garis tepi atas: biru (CYAN) + merah (MAGENTA)</li>
+<li>Garis tepi bawah: hitam (juri)</li>
+<li>Garis samping kiri &amp; kanan (putih)</li>
+<li>Garis tengah (putih)</li>
+<li>Goal Area kiri &amp; kanan (putih)</li>
+<li>Lingkaran tengah (putih)</li>
+<li>Gawang kiri &amp; kanan dengan kedalaman 60px (putih)</li>
+<li>Titik tengah (center spot)</li>
+<li>Titik penalty kiri &amp; kanan</li>
+<li>Posisi robot (gambar PNG di-rotate sesuai yaw)</li>
+</ol>
+<h2>11.5 Konversi Koordinat</h2>
+<pre><code class="language-python">def position_Callback(data):
+    Xglobal = (data.x / P) + nolX   # internal → pixel
+    Yglobal = (data.y / P) + nolY
+    Wglobal = data.theta
+
+def position2(x, y, t):
+    robot = pg.image.load(&quot;klipartz.com.png&quot;)
+    pose = pg.transform.rotate(robot, yaw)
+    layar.blit(pose, [x + xnol, y + ynol])
+</code></pre>
+<h2>11.6 Subscribers</h2>
+<pre><code class="language-python">/DEWO/Odometry/position   → position_Callback (Pose2D)
+/DEWO/MotionControl/yaw   → heading_Callback (Float32)
+</code></pre>
+<h2>11.7 Cara Menjalankan</h2>
+<pre><code class="language-bash"># Dengan ROS
+rosrun kri2027 lapangan.py
+
+# Atau langsung (pastikan roscore running)
+python motion/src/lapangan.py
+</code></pre>
+<hr />
+<h1>12. KEEPER SYSTEM</h1>
+<h2>12.1 keeper_driver.py</h2>
+<p><strong>File:</strong> <code>motion/src/keeper_driver.py</code> | <strong>Baris:</strong> ~200</p>
+<p>Driver sederhana untuk kiper. Tidak memiliki:<br />
+- WalkingParam subscriber (kiper tidak jalan komplex)<br />
+- Odometry goal_position subscriber<br />
+- Quintic walk profile</p>
+<p><strong>Topik yang dipublish:</strong></p>
+<pre><code class="language-python">pub_JointKaki   → /DEWO/Odometry/jointkaki
+pub_TaskStatus  → /KRSBI/Manuvering/Status
+pub_YawPos      → /KRSBI/Manuvering/Sensor/Gyro/Yaw
+</code></pre>
+<h2>12.2 keeper_proses.py</h2>
+<p><strong>File:</strong> <code>motion/src/keeper_proses.py</code> | <strong>Baris:</strong> <strong>0 (KOSONG!)</strong></p>
+<p><strong>Belum ada implementasi strategi kiper!</strong></p>
+<p>Yang seharusnya ada (rekomendasi):<br />
+- Deteksi arah bola<br />
+- Pergerakan menyamping (side step) mengikuti bola<br />
+- Dive (loncat) ke kiri/kanan saat bola dekat<br />
+- Positioning di tengah gawang<br />
+- Koordinasi dengan role UTAMA (lempar bola setelah ditangkap)</p>
+<hr />
+<h1>13. MOVEMENT SCHEMES (SKEMA)</h1>
+<h2>13.1 skema1.py — Kickoff Scheme 1</h2>
+<p><strong>File:</strong> <code>motion/src/skema1.py</code> | <strong>Baris:</strong> ~350</p>
+<p><strong>Skema kickoff multi-robot versi 1:</strong></p>
+<pre><code class="language-python">WAIT_ROBOT2_TIME = 3000  # 3 detik
+
+# Robot 1 = Kicker
+# Robot 2 = Receiver (passing target)
+
+Alur:
+1. Robot 1 positioning di bola
+2. Robot 2 positioning di posisi receiver
+3. Robot 1 kick ke arah Robot 2
+4. Robot 2 menerima bola
+</code></pre>
+<p><strong>Publishes:</strong></p>
+<pre><code class="language-python">/KRSSI/BallPossession  # Indikator siapa yang pegang bola
+</code></pre>
+<h2>13.2 skema2.py — Kickoff Scheme 2</h2>
+<p><strong>File:</strong> <code>motion/src/skema2.py</code> | <strong>Baris:</strong> ~300</p>
+<p><strong>Skema kickoff multi-robot versi 2 (alternatif):</strong></p>
+<pre><code class="language-python">WAIT_ROBOT2_TIME = 1000  # 1 detik (lebih cepat dari skema 1)
+
+# Robot 1 = Kicker
+# Robot 2 = Receiver
+
+Alur: Sama seperti skema1 tapi timing berbeda
+</code></pre>
+<hr />
+<h1>14. FILE TESTING</h1>
+<h2>14.1 jalan_kotak.py</h2>
+<p><strong>File:</strong> <code>motion/src/jalan_kotak.py</code> | <strong>Baris:</strong> ~200</p>
+<p><strong>Test: Robot berjalan membentuk kotak.</strong></p>
+<pre><code class="language-python">Alur:
+1. Jalan maju X detik
+2. Belok 90°
+3. Ulangi 4 kali (kotak)
+</code></pre>
+<h2>14.2 tesjalan.py</h2>
+<p><strong>File:</strong> <code>motion/src/tesjalan.py</code> | <strong>Baris:</strong> ~200</p>
+<p><strong>Test: Jalan lurus dengan koreksi heading.</strong></p>
+<pre><code class="language-python"># Menggunakan sync_write_item untuk kontrol langsung
+rospy.Publisher(&quot;/robotis/sync_write_item&quot;, SyncWriteItem, queue_size=1)
+
+# Jalan maju dengan koreksi yaw
+walking(x, 0, heading_correction, period)
+</code></pre>
+<h2>14.3 tesskema1.py</h2>
+<p><strong>File:</strong> <code>motion/src/tesskema1.py</code> | <strong>Baris:</strong> <strong>0 (KOSONG!)</strong></p>
+<p>Tidak ada implementasi.</p>
+<h2>14.4 test.py</h2>
+<p><strong>File:</strong> <code>motion/src/test.py</code> | <strong>Baris:</strong> 2</p>
+<pre><code class="language-python">print(&quot;helloworld&quot;)
+</code></pre>
+<p>Test paling sederhana — hanya print.</p>
+<hr />
+<h1>15. COMPLETE FUNCTION REFERENCE</h1>
+<h2>15.1 Motion Control Functions</h2>
+<h3>MotionModule Switching</h3>
+<pre><code class="language-python">MotionMode(mode)          # Set module: &quot;walk&quot;/&quot;action&quot;/&quot;head&quot;
+Motion_InitWalking()      # Switch ke walking module + delay 0.5s
+Motion_InitAction()       # Switch ke action module + delay 0.5s
+Motion_InitHead()         # Switch ke head module + delay 0.3s
+</code></pre>
+<h3>Motion Command</h3>
+<pre><code class="language-python">MotionCommand(cmd)        # &quot;start&quot;/&quot;stop&quot;/&quot;reset&quot;
+Motion_InitPose()         # Reset to initial pose (4s delay)
+Motion_Start()            # Start walking engine
+Motion_Stop()             # Stop walking engine + delay 0.5s
+</code></pre>
+<h3>Walking</h3>
+<pre><code class="language-python">walking(x, y, o, t)       # Set walking params:
+                          #   x: forward amplitude (±0.020)
+                          #   y: side amplitude (±0.015)
+                          #   o: rotation amplitude (±15)
+                          #   t: period time (0.63 normal / 0.45 after kick)
+</code></pre>
+<h3>Action</h3>
+<pre><code class="language-python">Motion_ActionNum(num)     # Execute action page (delay 3-4s)
+Motion_Kick(num)          # Stop → InitAction → ActionNum → InitWalking
+</code></pre>
+<h3>Head Control</h3>
+<pre><code class="language-python">Motion_HeadControl(pan, tilt)  # Set head position (radians)
+Motion_HeadScan(enable)        # Enable/disable auto head scan
+</code></pre>
+<h3>LED &amp; Buzzer</h3>
+<pre><code class="language-python">LED_RGB(r, g, b)          # Set RGB LED (0-31 per channel)
+LED_Status(r, g, b)       # Set status LED (0-1 per channel)
+Buzzer(freq)              # Set buzzer frequency
+BuzzerTone(count, period) # Buzzer pattern (count × period ms)
+</code></pre>
+<h2>15.2 Odometry Control</h2>
+<pre><code class="language-python">OdomStart()               # Start odometry computation
+OdomStop()                # Stop odometry computation
+Odom_Command(command)     # Send command: &quot;start&quot;/&quot;stop&quot;
+</code></pre>
+<h3>Target Setting</h3>
+<pre><code class="language-python">Pointposition(x, y)       # Set target position (Pose2D)
+Goalposition(jersey)      # Set goal position based on jersey:
+                          #   CYAN → (900, 300)
+                          #   MAGENTA → (0, 300)
+</code></pre>
+<h3>Navigation</h3>
+<pre><code class="language-python">walk_to_position(x, y, o)    # Navigate to (x,y) then rotate to heading o
+  returns (x_move, y_move, a_move, in_position)
+
+walk_follow_head(pan, tilt)  # Walk following ball head tracking
+  returns (x_move, y_move, a_move)
+
+walk_ball_position_to_kick(target_pan, target_tilt, heading)
+  returns (x_move, y_move, a_move, is_located)
+
+walk_rotate2(heading)        # Rotate to heading while adjusting distance
+  returns (x_move, y_move, a_move)
+
+walk_rotate(heading, y_move_change)  # Simple rotate
+  returns (x_move, y_move, a_move, is_done)
+
+walk_rotate_goal(heading)    # Rotate to goal heading
+  returns (x_move, y_move, a_move)
+
+walk_dribble(heading)        # Dribble walk (slow forward + side adjust)
+  returns (x_move, y_move, a_move)
+
+walk_in_ball_area(heading)   # Walk within ball area
+  returns (x_move, y_move, a_move)
+
+walk_ball_positioning_to_goal(heading)
+  returns (x_move, y_move, a_move, ball_located)
+</code></pre>
+<h2>15.3 Helper Functions</h2>
+<h3>Math Utilities</h3>
+<pre><code class="language-python">normalize_deg(angle)       # Normalize to 0-360°
+Heading_Gap(goal, yaw)    # Shortest angular distance (-180 to 180)
+map_value(val, smin, smax, tmin, tmax)    # Map with clamping
+map_value2(val, smin, smax, tmin, tmax)   # Map without clamping
+calculate_pid(val, set_point)             # PID controller
+limit_value(val, min, max)                # Clamp value
+filter_value(val, coeff)                  # Low-pass filter
+scale_value(val, src, trg)                # Linear scale
+min_value(a, b)                           # Minimum
+max_value(a, b)                           # Maximum
+</code></pre>
+<h3>Detection Helpers</h3>
+<pre><code class="language-python">check_ball_lost(threshold)     # Returns 1 if ball lost for N frames
+check_goal_lost(threshold)     # Returns 1 if goal lost for N frames
+</code></pre>
+<h3>Vision Control</h3>
+<pre><code class="language-python">start_tracking(state)          # True=start, False=stop ball tracking
+start_positioning(state)       # True=start, False=stop goal positioning
+</code></pre>
+<h3>Communication</h3>
+<pre><code class="language-python">udp_sendmsg(msg)               # Send message via UDP
+</code></pre>
+<h3>Timing</h3>
+<pre><code class="language-python">Ticks()                        # Current time in milliseconds
+</code></pre>
+<h2>15.4 Process Helper Functions</h2>
+<pre><code class="language-python">print_once(statement)          # Print only if statement changed (reduce spam)
+</code></pre>
+<hr />
+<h1>16. PARAMETER TUNING GUIDE</h1>
+<h2>16.1 Walking Parameters (driver.py baris 489-516)</h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Nilai</th>
+<th>Efek Menaikkan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>init_x_offset</code></td>
+<td>-0.003</td>
+<td>Robot lebih maju (berat ke depan)</td>
+</tr>
+<tr>
+<td><code>init_y_offset</code></td>
+<td>0.038</td>
+<td>Geser stance ke kanan</td>
+</tr>
+<tr>
+<td><code>init_z_offset</code></td>
+<td>0.025</td>
+<td>Badan lebih tinggi</td>
+</tr>
+<tr>
+<td><code>hip_pitch_offset</code></td>
+<td>15°</td>
+<td>Condong ke depan (stabil)</td>
+</tr>
+<tr>
+<td><code>dsp_ratio</code></td>
+<td>0.29</td>
+<td>Lebih stabil (2 kaki lebih lama)</td>
+</tr>
+<tr>
+<td><code>step_fb_ratio</code></td>
+<td>0.28</td>
+<td>Langkah lebih panjang</td>
+</tr>
+<tr>
+<td><code>z_move_amplitude</code></td>
+<td>0.09</td>
+<td>Angkat kaki lebih tinggi</td>
+</tr>
+<tr>
+<td><code>balance_enable</code></td>
+<td>True</td>
+<td>Balance aktif</td>
+</tr>
+<tr>
+<td><code>balance_hip_roll_gain</code></td>
+<td>0.35</td>
+<td>Koreksi hip roll lebih kuat</td>
+</tr>
+<tr>
+<td><code>balance_knee_gain</code></td>
+<td>0.30</td>
+<td>Koreksi knee lebih kuat</td>
+</tr>
+<tr>
+<td><code>balance_ankle_roll_gain</code></td>
+<td>0.70</td>
+<td>Koreksi ankle roll lebih kuat</td>
+</tr>
+<tr>
+<td><code>balance_ankle_pitch_gain</code></td>
+<td>1.0</td>
+<td>Koreksi ankle pitch lebih kuat</td>
+</tr>
+<tr>
+<td><code>period_time</code></td>
+<td>0.63</td>
+<td>Lebih lambat (stabil)</td>
+</tr>
+</tbody>
+</table>
+<h2>16.2 Dinamis Walking (dari process.py)</h2>
+<p>Parameter yang dikirim tiap siklus:</p>
+<pre><code class="language-python">walking(x_move, y_move, angle_move, period_time)
+</code></pre>
+<ul>
+<li><code>x_move</code>: ±0.020 maks (maju) / -0.008 (mundur)</li>
+<li><code>y_move</code>: ±0.015 maks (side step)</li>
+<li><code>angle_move</code>: ±15 maks (rotasi)</li>
+<li><code>period_time</code>: 0.63 (normal), 0.45 (setelah kick)</li>
+</ul>
+<h2>16.3 PID Parameters</h2>
+<h3>Ball Tracking (driver.py)</h3>
+<pre><code class="language-python">p_gain = 0.265   # Proporsional
+i_gain = 0.0     # Integral (tidak dipakai)
+d_gain = 0.02    # Derivatif
+</code></pre>
+<h3>Goal Tracking (driver.py)</h3>
+<pre><code class="language-python">p_gain = 0.08    # Lebih kecil = tracking lebih lambat
+i_gain = 0.0
+d_gain = 0.028
+</code></pre>
+<h3>Walk PID (process.py)</h3>
+<pre><code class="language-python">kp = 8.0         # Proporsional untuk rotasi
+ki = 5.0         # Integral (dikomentari)
+kd = 15.0        # Derivatif
+</code></pre>
+<h2>16.4 Thresholds</h2>
+<h3>Ball Detection (process.py)</h3>
+<pre><code class="language-python">ballsize_treshold = 380    # Threshold jarak bola (role decision)
+ballsize_range = 1000      # Range untuk advantage filter
+</code></pre>
+<h3>Ball Lost</h3>
+<pre><code class="language-python">check_ball_lost(20)        # 20 frame = ~2 detik (10Hz loop)
+</code></pre>
+<h3>Position Location</h3>
+<pre><code class="language-python">delta_pan &lt; 2.0            # Toleransi pan untuk kick positioning
+delta_tilt &lt; 13            # Toleransi tilt untuk kick
+ball_size &gt; 4000           # Ukuran bola minimal untuk kick
+</code></pre>
+<h3>Fall Detection (process.py)</h3>
+<pre><code class="language-python">pitch &gt; 60°  → fallen_forward
+pitch &lt; -60° → fallen_backward
+</code></pre>
+<h2>16.5 Action Numbers</h2>
+<table>
+<thead>
+<tr>
+<th>Aksi</th>
+<th>Number</th>
+<th>File</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Kick Kanan</td>
+<td>230</td>
+<td>process.py (baru)</td>
+</tr>
+<tr>
+<td>Kick Kiri</td>
+<td>225</td>
+<td>process.py (baru)</td>
+</tr>
+<tr>
+<td>Kick Kanan (old)</td>
+<td>180, 181, 182, 183</td>
+<td>process_baru.py</td>
+</tr>
+<tr>
+<td>Kick Kiri (old)</td>
+<td>176, 177, 178, 179</td>
+<td>process_baru.py</td>
+</tr>
+<tr>
+<td>Get Up Forward</td>
+<td>122</td>
+<td>Semua file</td>
+</tr>
+<tr>
+<td>Get Up Backward</td>
+<td>66</td>
+<td>Semua file</td>
+</tr>
+</tbody>
+</table>
+<h2>16.6 Koordinat Initial Position</h2>
+<table>
+<thead>
+<tr>
+<th>Position</th>
+<th>X</th>
+<th>Y</th>
+<th>Theta</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CyanBelakang</td>
+<td>200</td>
+<td>600</td>
+<td>90°</td>
+</tr>
+<tr>
+<td>CyanTengah</td>
+<td>350</td>
+<td>600</td>
+<td>90°</td>
+</tr>
+<tr>
+<td>CyanBelakang_seberang</td>
+<td>200</td>
+<td>0</td>
+<td>-90°</td>
+</tr>
+<tr>
+<td>CyanTengah_seberang</td>
+<td>350</td>
+<td>0</td>
+<td>-90°</td>
+</tr>
+<tr>
+<td>MagentaBelakang</td>
+<td>700</td>
+<td>600</td>
+<td>90°</td>
+</tr>
+<tr>
+<td>MagentaTengah</td>
+<td>550</td>
+<td>600</td>
+<td>90°</td>
+</tr>
+<tr>
+<td>MagentaBelakang_seberang</td>
+<td>700</td>
+<td>0</td>
+<td>-90°</td>
+</tr>
+<tr>
+<td>MagentaTengah_seberang</td>
+<td>550</td>
+<td>0</td>
+<td>-90°</td>
+</tr>
+<tr>
+<td>Positioning_Kick_Off (Cyan)</td>
+<td>100</td>
+<td>300</td>
+<td>0°</td>
+</tr>
+<tr>
+<td>Positioning_Kick_Off (Magenta)</td>
+<td>800</td>
+<td>300</td>
+<td>180°</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h1>17. DEBUGGING &amp; TROUBLESHOOTING</h1>
+<h2>17.1 Cheatsheet Cepat</h2>
+<table>
+<thead>
+<tr>
+<th>Masalah</th>
+<th>Cek di</th>
+<th>Baris</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Robot tidak jalan</td>
+<td>driver.py Command_Callback</td>
+<td>75-80</td>
+</tr>
+<tr>
+<td>Robot jalan tapi oleng</td>
+<td>driver.py Walking params</td>
+<td>489-516</td>
+</tr>
+<tr>
+<td>Robot tidak lihat bola</td>
+<td>process.py check_ball_lost</td>
+<td>793-801</td>
+</tr>
+<tr>
+<td>Posisi odometry ngaco</td>
+<td>odometry_baru_2025.py position()</td>
+<td>150-166</td>
+</tr>
+<tr>
+<td>Head tracking tidak stabil</td>
+<td>driver.py PID gains</td>
+<td>224-227</td>
+</tr>
+<tr>
+<td>Robot tidak tendang</td>
+<td>process.py positioning_kick condition</td>
+<td>1644-1654</td>
+</tr>
+<tr>
+<td>Robot jatuh terus</td>
+<td>process.py fall detection threshold</td>
+<td>370-377</td>
+</tr>
+<tr>
+<td>Komunikasi multi-robot</td>
+<td>process.py RobotInfo_Callback</td>
+<td>522-569</td>
+</tr>
+<tr>
+<td>Gyro yaw error</td>
+<td>process.py yaw_heading filter</td>
+<td>263-295</td>
+</tr>
+</tbody>
+</table>
+<h2>17.2 Cara Debugging</h2>
+<h3>1. Cek ROS Topic</h3>
+<pre><code class="language-bash"># Lihat output sensor
+rostopic echo /robotis/open_cr/yaw
+rostopic echo /robotis/open_cr/imu
+
+# Lihat keputusan state machine
+rostopic echo /DEWO/MotionControl/WalkingParams
+rostopic echo /DEWO/Odometry/position
+
+# Lihat vision
+rostopic echo /DEWO/image_processing/deteksi_bola/ball_state
+rostopic echo /DEWO/image_processing/deteksi_bola/coordinate
+</code></pre>
+<h3>2. Cek ROS Graph</h3>
+<pre><code class="language-bash">rqt_graph
+# Atau
+rosrun rqt_graph rqt_graph
+</code></pre>
+<h3>3. Logging</h3>
+<pre><code class="language-python"># Di process.py, gunakan:
+rospy.loginfo(&quot;Pesan&quot;)      # Info
+rospy.logwarn(&quot;Pesan&quot;)      # Warning
+rospy.logerr(&quot;Pesan&quot;)       # Error
+
+# Atau print_once() untuk mengurangi spam
+</code></pre>
+<h3>4. Simulasi Tanpa Robot</h3>
+<pre><code class="language-bash"># 1. roscore
+roscore
+
+# 2. lapangan (visual)
+rosrun kri2027 lapangan.py
+
+# 3. Publish manual
+rostopic pub /DEWO/Odometry/position geometry_msgs/Pose2D &quot;x: 450 y: 300 theta: 90&quot;
+</code></pre>
+<h3>5. Kalibrasi Yaw</h3>
+<pre><code class="language-python"># Button user → set yawOffset = -yawHeading
+# Sehingga yaw_fixed = 0 saat menghadap depan
+</code></pre>
+<h2>17.3 Common Issues &amp; Solutions</h2>
+<h3>Robot Jalan Miring</h3>
+<pre><code>Penyebab: init_y_offset atau balance_hip_roll_gain salah
+Solusi: Tuning init_y_offset (positif = koreksi ke kiri)
+        Naikkan balance_hip_roll_gain untuk koreksi otomatis
+</code></pre>
+<h3>Robot Sering Jatuh ke Depan</h3>
+<pre><code>Penyebab: hip_pitch_offset terlalu kecil
+Solusi: Naikkan hip_pitch_offset (15° → 18°)
+        Turunkan x_move_amplitude
+</code></pre>
+<h3>Robot Tidak Merespon Vision</h3>
+<pre><code>Penyebab: tracking_state tidak &quot;start&quot;
+          ball_state callback error
+Solusi: Cek start_tracking(True) dipanggil
+        Cek /DEWO/.../ball_state topic
+</code></pre>
+<h3>Odometry Drift Cepat</h3>
+<pre><code>Penyebab: Noise pada FK, walking di permukaan tidak rata
+Solusi: Gunakan odometry_bno.py (dengan IMU feedback)
+        Tambah periode update
+</code></pre>
+<h3>Double Kick (2 Robot Nendang Bersamaan)</h3>
+<pre><code>Penyebab: Com_decision() tidak filter Taskcom=&quot;kck&quot;
+Solusi: Pastikan baris 453-458 aktif:
+        if Taskcom == &quot;kck&quot;: robotstatus = &quot;SECOND&quot;
+</code></pre>
+<hr />
+<h1>18. LAMPIRAN: KODE AKSES CEPAT</h1>
+<h2>18.1 Navigation Cheatsheet</h2>
+<pre><code class="language-python"># Baris penting di process.py:
+1322     # main loop dimulai
+1336     # Status READY handler
+1351     # PRE_POSITIONING_KICKOFF
+1357     # SET handler
+1360     # PRE_RUN handler
+1373     # PRE_STOP handler
+1397     # RUN state dimulai (pemisahan role)
+1507     # Task flow UTAMA dimulai
+1537     # Task 'initial'
+1561     # Task 'follow_ball'
+1596     # Task 'heading_to_goal_first'
+1621     # Task 'positioning_kick'
+1676     # Task 'kick_ball'
+1713     # Task 'get_up'
+445      # Com_decision()
+848      # walk_follow_head()
+1199     # walk_ball_position_to_kick()
+</code></pre>
+<pre><code class="language-python"># Baris penting di driver.py:
+531      # main loop dimulai
+540-584  # Main loop logic
+489-516  # Walking parameters (AKTIF)
+192-253  # PID ball tracking
+255-303  # PID goal tracking
+</code></pre>
+<pre><code class="language-python"># Baris penting di odometry_baru_2025.py:
+278      # main loop dimulai
+87-96    # ForwardOdom (kinematika)
+105-110  # SideOdom (kinematika samping)
+112-115  # AngleOdom (kinematika rotasi)
+125-132  # XMove (akumulasi X)
+144-147  # YMove (akumulasi Y)
+150-166  # Position (akumulasi global)
+</code></pre>
+<h2>18.2 Startup Commands (Full System)</h2>
+<pre><code class="language-bash"># Terminal 1: Manager
+roslaunch op3_manager op3_manager.launch
+
+# Terminal 2: Vision
+rosrun vision2027 vision_2027.py
+
+# Terminal 3: Communication Sender
+rosrun communication2027 sendernasional.py
+
+# Terminal 4: Communication Receiver
+rosrun communication2027 com_receivernasional.py
+
+# Terminal 5: State Machine
+rosrun kri2027 process.py
+
+# Terminal 6: Low-Level Driver
+rosrun kri2027 driver.py
+
+# Terminal 7: Field Display
+rosrun kri2027 lapangan.py
+
+# Terminal 8: Game Controller
+rosrun protocolgc receiver8.py
+
+# Terminal 9: Odometry
+rosrun kri2026 odometry_baru_20.py
+
+# Trigger Start
+rostopic pub /robotis/open_cr/button std_msgs/String &quot;data: 'start'&quot;
+</code></pre>
+<h2>18.3 Quick Test Commands</h2>
+<pre><code class="language-bash"># Test vision
+rostopic echo /DEWO/image_processing/deteksi_bola/ball_state
+rostopic echo /DEWO/image_processing/deteksi_bola/coordinate
+
+# Test motion
+rostopic pub /DEWO/MotionControl/Command std_msgs/String &quot;data: 'start'&quot;
+rostopic pub /DEWO/MotionControl/WalkingParams ...
+
+# Test odometry
+rostopic echo /DEWO/Odometry/position
+rostopic pub /DEWO/Odometry/goal_position geometry_msgs/Pose2D &quot;x: 900 y: 300 theta: 0&quot;
+
+# Test button
+rostopic pub /robotis/open_cr/button std_msgs/String &quot;data: 'start'&quot;
+rostopic pub /robotis/open_cr/button std_msgs/String &quot;data: 'mode'&quot;
+rostopic pub /robotis/open_cr/button std_msgs/String &quot;data: 'user'&quot;
+
+# Test communication
+rostopic echo /DEWO/Communication/robotinfo
+rostopic pub /DEWO/Communication/from_udp_to_ros std_msgs/String &quot;data: 'test'&quot;
+</code></pre>
+<hr />
+<h2>18.4 Istilah Penting (Glossary)</h2>
+<table>
+<thead>
+<tr>
+<th>Istilah</th>
+<th>Arti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FK / Forward Kinematics</td>
+<td>Perhitungan posisi kaki dari sudut joint</td>
+</tr>
+<tr>
+<td>Dead-Reckoning</td>
+<td>Estimasi posisi tanpa referensi eksternal</td>
+</tr>
+<tr>
+<td>Phase</td>
+<td>Fase walking (0/1/2/3 = foot touch/swap/lift)</td>
+</tr>
+<tr>
+<td>DSP</td>
+<td>Double Support Phase (2 kaki di tanah)</td>
+</tr>
+<tr>
+<td>SSP</td>
+<td>Single Support Phase (1 kaki di tanah)</td>
+</tr>
+<tr>
+<td>Action Page</td>
+<td>Gerakan pre-programmed (kick, getup)</td>
+</tr>
+<tr>
+<td>Gait</td>
+<td>Pola jalan</td>
+</tr>
+<tr>
+<td>Yaw</td>
+<td>Sudut orientasi robot (kompas)</td>
+</tr>
+<tr>
+<td>Pitch</td>
+<td>Sudut kemiringan depan-belakang</td>
+</tr>
+<tr>
+<td>Pan</td>
+<td>Gerakan head horizontal (kiri-kanan)</td>
+</tr>
+<tr>
+<td>Tilt</td>
+<td>Gerakan head vertikal (atas-bawah)</td>
+</tr>
+<tr>
+<td>Taskcom</td>
+<td>Task code yang di-share antar robot via UDP</td>
+</tr>
+<tr>
+<td>Initpoint</td>
+<td>Posisi awal robot di lapangan</td>
+</tr>
+<tr>
+<td>Gate Counter</td>
+<td>Counter untuk mencegah multiple trigger state</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<blockquote>
+<p><strong>Ebook Motion System Gandamana v1.0</strong><br />
+Robot Humanoid OP3 — KRSBI-H<br />
+Universitas Negeri Surabaya<br />
+2025-2026</p>
+</blockquote>
+</body>
+</html>
