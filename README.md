@@ -3,7 +3,7 @@
 * Manager = roslaunch op3_manager op3_manager.launch
 * Gui = rosrun op3_gui_demo op3_gui_demo
 * Process = rosrun kri2024 proccess_com.py
-* Button start = rostopic pub/robotis/open_cr/button std_msg/String "data: 'start'"
+* rostopic pub /robotis/open_cr/button std_msgs/String "data: 'start'" //start //mode //reset
 * Motion = roslaunch op3_action_editor op3_action_editor.launch
 * Driver = rosrun kri2024 driver_baru.py
 * Odometry = rosrun kri2024 odometry.py
