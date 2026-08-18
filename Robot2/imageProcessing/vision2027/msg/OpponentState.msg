@@ -1,1 +1,0 @@
-string opponent_status

@@ -1,1 +1,0 @@
-string ball_status

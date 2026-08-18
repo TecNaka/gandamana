@@ -1,1 +1,0 @@
-string goal_status
